@@ -76,6 +76,8 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
+#define MLFQ_LEVELS 4 // MLFQ levels; level 0 has the highest priority
+
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -94,6 +96,7 @@ struct proc {
   int nsched;           // times scheduler() switched to this process
   int ctime;            // value of ticks when allocated
   int level;            // current MLFQ level, 0..3
+  int ticksused;        // ticks used at the current level
 
   // wait_lock must be held when using this:
   struct proc *parent; // Parent process

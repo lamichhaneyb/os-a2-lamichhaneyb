@@ -83,7 +83,7 @@ usertrap(void)
 
   // on a timer interrupt, charge p a tick; give up the CPU if the
   // scheduler says so.
-  if (which_dev == 2 && proc_tick(p))
+  if (which_dev == 2 && mlfq_tick(p))
     yield();
 
   prepare_return();
@@ -157,7 +157,7 @@ kerneltrap()
   // on a timer interrupt, charge the running process (if any) a tick;
   // give up the CPU if the scheduler says so.
   struct proc *p = myproc();
-  if (which_dev == 2 && p != 0 && proc_tick(p))
+  if (which_dev == 2 && p != 0 && mlfq_tick(p))
     yield();
 
   // the yield() may have caused some traps to occur,
@@ -172,6 +172,10 @@ clockintr()
   if (cpuid() == 0) {
     acquire(&tickslock);
     ticks++;
+    // MLFQ priority boost every 64 ticks, to prevent starvation.
+    // Holds tickslock; mlfq_boost() takes each p->lock after it.
+    if (ticks % 64 == 0)
+      mlfq_boost();
     wakeup(&ticks);
     release(&tickslock);
   }
