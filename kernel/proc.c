@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pinfo.h"
 
 struct cpu cpus[NCPU];
 
@@ -124,6 +125,13 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+
+  // Fresh scheduling statistics. Read ticks without tickslock:
+  // we hold p->lock, and the lock order is tickslock then p->lock.
+  p->runticks = 0;
+  p->nsched = 0;
+  p->ctime = ticks;
+  p->level = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
@@ -449,6 +457,7 @@ scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
+        p->nsched++;
         c->proc = p;
         swtch(&c->context, &p->context);
 
@@ -494,6 +503,55 @@ sched(void)
   intena = mycpu()->intena;
   swtch(&p->context, &mycpu()->context);
   mycpu()->intena = intena;
+}
+
+// Called on every timer interrupt by the CPU that took it,
+// for the process p that it was running. Charges p one tick.
+// Returns 1 if p should give up the CPU.
+int
+proc_tick(struct proc *p)
+{
+  acquire(&p->lock);
+  p->runticks++;
+  release(&p->lock);
+  return 1; // round-robin: yield on every tick
+}
+
+// Copy a struct pinfo for each non-UNUSED process, in proc[] order,
+// to the user array at addr, stopping after max entries.
+// Returns the number copied, or -1 on error.
+int
+kgetpinfo(uint64 addr, int max)
+{
+  struct proc *me = myproc();
+  struct proc *p;
+  struct pinfo pi;
+  int n = 0;
+
+  if (max < 0)
+    return -1;
+
+  for (p = proc; p < &proc[NPROC] && n < max; p++) {
+    acquire(&p->lock);
+    if (p->state == UNUSED) {
+      release(&p->lock);
+      continue;
+    }
+    pi.pid = p->pid;
+    pi.state = p->state;
+    pi.level = p->level;
+    pi.runticks = p->runticks;
+    pi.nsched = p->nsched;
+    pi.ctime = p->ctime;
+    safestrcpy(pi.name, p->name, sizeof(pi.name));
+    release(&p->lock);
+
+    if (copyout(me->pagetable, me->sz, addr + (uint64)n * sizeof(pi),
+                (char *)&pi, sizeof(pi)) < 0)
+      return -1;
+    n++;
+  }
+  return n;
 }
 
 // Give up the CPU for one scheduling round.

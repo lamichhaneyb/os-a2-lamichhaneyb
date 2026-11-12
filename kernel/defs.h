@@ -96,6 +96,8 @@ void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
 void            sleep_prepare(void*);
 void            sleep(void);
+int             proc_tick(struct proc*);
+int             kgetpinfo(uint64, int);
 void            userinit(void);
 int             kwait(uint64);
 void            wakeup(void*);

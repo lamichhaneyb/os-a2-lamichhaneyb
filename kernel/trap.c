@@ -81,8 +81,9 @@ usertrap(void)
   if (killed(p))
     kexit(-1);
 
-  // give up the CPU if this is a timer interrupt.
-  if (which_dev == 2)
+  // on a timer interrupt, charge p a tick; give up the CPU if the
+  // scheduler says so.
+  if (which_dev == 2 && proc_tick(p))
     yield();
 
   prepare_return();
@@ -153,8 +154,10 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-  // give up the CPU if this is a timer interrupt.
-  if (which_dev == 2 && myproc() != 0)
+  // on a timer interrupt, charge the running process (if any) a tick;
+  // give up the CPU if the scheduler says so.
+  struct proc *p = myproc();
+  if (which_dev == 2 && p != 0 && proc_tick(p))
     yield();
 
   // the yield() may have caused some traps to occur,
